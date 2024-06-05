@@ -1,6 +1,6 @@
 import commLaptop
 
-COMMANDLIST = {"move", "arm", "power"}
+
 
 def main():
     ip = input("Enter target IP Address:\n")
@@ -20,25 +20,9 @@ def main():
     exit=False
     while not exit:
         fullCommand = input(">")
-        words=fullCommand.split()
-        command = words[0]
-        arguments = words[1:]
 
-        # Exit command
-        if command == "exit":
-            exit=True
-        elif command in COMMANDLIST:
-            print("Executing command "+ command)
-            print("Arguments")
-            print(arguments)
-            client.send_message(fullCommand)
+        exit = client.execute_command(fullCommand)
 
-        else:
-            print("Unknown Command")
-
-
-    print("Exiting")
-    client.close()
 
 if __name__ == "__main__":
     main()

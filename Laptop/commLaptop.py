@@ -2,10 +2,12 @@ import socket
 import time
 import threading
 
+COMMANDLIST = {"move", "arm", "power", "status"}
+
 class Client:
     def __init__(self, host, port):
         self.host = host
-        self.port = port
+        self.port = int(port)
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.lock = threading.Lock()
         self.enabled=False
@@ -32,18 +34,44 @@ class Client:
             try:
                 self.client_socket.send(message.encode())
             except:
-                self.close()
+                print("Closing due to a disconnect. Type refresh to reconnect!")
+                self.enabled=False
             response = self.client_socket.recv(1024).decode()
-            # print("Server response:", response)
+            if response!="None":
+                print(response)
 
     def send_message_thread(self):
         while self.enabled:
-            message = "Hello from laptop"
+            message = "refresh"
             self.send_message(message)
-            time.sleep(10000)  # Send message every second
+            time.sleep(2)  # Send message every second
 
+    def execute_command(self,input):
+        words=input.split()
+
+        if len(words) == 0:
+            return
+
+        command = words[0]
+        arguments = words[1:]
+
+        # Exit command
+        if command == "exit":
+            print("Exiting")
+            self.close()
+            return True
+        elif command == "refresh":
+            return not self.connect()
+        elif command in COMMANDLIST:
+            self.send_message(input)
+
+        else:
+            print("Unknown Command")
+
+        return False
 
     def close(self):
+        print("Closed Connection")
         self.enabled=False
         self.client_socket.close()
         self.continue_send_thread.join()

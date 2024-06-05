@@ -5,11 +5,42 @@ class CompleteInstruction:
     def __init__(self):
         self.power = False
 
+    def handle_instruction(self, instruction):
+        words = instruction.split()
+        if not words:
+            return ""
+        
+        command, *arguments = words
 
-    def moveWheel(self,speed,side): 
-        print("The wheels are moving at speed" + str(speed) + " on the "+ str(side))
 
-    def moveArm(self,angle,servo):
-        print("The Arm's servo " + str(servo) + " is at angle " + str(angle))
+        if command == "status":
+            return self.get_status()
+        elif command =="refresh":
+            return "None"
+        elif command == "move" and len(arguments) >= 2:
+            self.move(arguments[0], arguments[1])
+        elif command == "arm" and len(arguments) >= 2:
+            self.arm(arguments[0], arguments[1])
+        elif command == "power" and len(arguments) >= 1:
+            self.powerSet(arguments[0])
+        elif command == "stop" and len(arguments) >= 0:
+            self.stop()
+        else:
+            return "Error From command"
+        return "None"
 
-CompleteInstruction().moveArm(44,32)
+    def stop(self):
+        print("Rover Stopping")
+
+    def move(self, speed, side):
+        print(f"The wheels are moving at speed {speed} on the {side}")
+
+    def arm(self, angle, servo):
+        print(f"The Arm's servo {servo} is at angle {angle}")
+
+    def powerSet(self, status):
+        print(f"The rover's power is {status}")
+        self.power_status = status
+
+    def get_status(self):
+        return "The rover is doing fine"

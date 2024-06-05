@@ -2,6 +2,8 @@ import socket
 import threading
 import time
 
+import completeInstruction
+
 class Server:
     def __init__(self, host, port):
         self.host = host
@@ -11,6 +13,8 @@ class Server:
         
         self.enabled=False
         self.recievedCheck=True
+
+        self.rover = completeInstruction.CompleteInstruction()
     
     def start(self):
         self.server_socket.listen(1)
@@ -32,8 +36,11 @@ class Server:
                 break
             if not data:
                 break
-            print("Received:", data)
-            response = "Server received: " + data
+            # print("Received:", data)
+
+
+            response = self.rover.handle_instruction(data)
+
             self.client_socket.send(response.encode())
         self.client_socket.close()
         self.start()
@@ -44,7 +51,7 @@ class Server:
 
 if __name__ == "__main__":
     SERVER_IP = 'localhost'  
-    SERVER_PORT = 6964
+    SERVER_PORT = 6969
     server = Server(SERVER_IP, SERVER_PORT)
     try:
         server.start()
