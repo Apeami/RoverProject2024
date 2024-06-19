@@ -11,6 +11,7 @@ class Client:
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.lock = threading.Lock()
         self.enabled=False
+        self.status = ""
     
     def connect(self):
         try:
@@ -37,13 +38,14 @@ class Client:
                 print("Closing due to a disconnect. Type refresh to reconnect!")
                 self.enabled=False
             response = self.client_socket.recv(1024).decode()
-            if response!="None":
-                print(response)
+            # if response!="None":
+            #     print(response)
+            return response
 
     def send_message_thread(self):
         while self.enabled:
-            message = "refresh"
-            self.send_message(message)
+            message = "status"
+            self.status = self.send_message(message)
             time.sleep(2)  # Send message every second
 
     def execute_command(self,input):

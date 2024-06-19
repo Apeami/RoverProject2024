@@ -47,6 +47,8 @@ class MainApp(QtWidgets.QMainWindow):
 
         self.ui.TogglePower.clicked.connect(self.toggle_power)
 
+        self.ui.RefreshButton.clicked.connect(self.referesh)
+
         self.ui.PowerIndicator.setText("Rover is Off")
 
         available_cameras = QCameraInfo.availableCameras()
@@ -59,6 +61,9 @@ class MainApp(QtWidgets.QMainWindow):
         self.camera.setViewfinder(self.ui.CameraView)  # Use the promoted widget
         # self.camera.setCaptureMode(QCamera.CaptureStillImage)
         self.camera.start()
+
+    def referesh(self):
+        self.ui.RoverStatusBox.setPlainText(self.client.status)
 
     def toggle_power(self):
         if self.power == False:

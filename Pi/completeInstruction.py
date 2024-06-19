@@ -1,5 +1,5 @@
 # This file is for actually executing the instruction that needs to be run on the rover. 
-
+import time
 
 class CompleteInstruction:
     def __init__(self):
@@ -43,4 +43,8 @@ class CompleteInstruction:
         self.power_status = status
 
     def get_status(self):
-        return "The rover is doing fine"
+        uptime = time.monotonic()
+        return f"""
+The rover status will be printed here
+The rover uptime is {uptime:.2f} seconds
+        """
