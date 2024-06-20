@@ -9,7 +9,22 @@ import ui_MainWindow
 from commLaptop import Client
 
 import sys
+from pyPS4Controller.controller import Controller
+import threading
 
+
+class MyController(Controller):
+
+    def __init__(self, client , **kwargs):
+        Controller.__init__(self, **kwargs)
+        self.client = client
+
+    def on_x_press(self):
+       print("Hello world")
+       self.client.send_message("power on")
+
+    def on_x_release(self):
+       print("Goodbye world")
 
 class MainApp(QtWidgets.QMainWindow):
     def __init__(self):
@@ -21,6 +36,8 @@ class MainApp(QtWidgets.QMainWindow):
 
         self.client = None
         self.connected = False
+
+
 
         self.selected_servo = 1
         self.key_to_servo = {
@@ -37,6 +54,13 @@ class MainApp(QtWidgets.QMainWindow):
         self.power = False
 
         self.show_connect_dialog()
+
+    
+        self.controller = MyController(self.client,interface="/dev/input/js0", connecting_using_ds4drv=False)
+
+        listen_thread = threading.Thread(target=self.controller.listen)
+        # Start the thread
+        listen_thread.start()
 
         self.ui.ConnectButton.clicked.connect(self.show_connect_dialog)
         self.ui.DisconnectButton.clicked.connect(self.disconnect)
