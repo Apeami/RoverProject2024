@@ -1,9 +1,13 @@
 # This file is for actually executing the instruction that needs to be run on the rover. 
 import time
+import PCA9685_v4_armtest
 
 class CompleteInstruction:
     def __init__(self):
         self.power = False
+
+        self.pwm = PCA9685_v4_armtest.PCA9685(0x40, debug=False)
+        self.pwm.setPWMFreq(50)
 
     def handle_instruction(self, instruction):
         words = instruction.split()
@@ -34,6 +38,10 @@ class CompleteInstruction:
 
     def move(self, speed, side):
         print(f"The wheels are moving at speed {speed} on the {side}")
+        if side == 'forward':
+            self.pwm.setServoPulse(0,speed)
+        if side == 'back':
+            self.pwm.setServoPulse(0,-speed)
 
     def arm(self, angle, servo):
         print(f"The Arm's servo {servo} is at angle {angle}")

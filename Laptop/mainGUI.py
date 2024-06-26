@@ -14,17 +14,71 @@ import threading
 
 
 class MyController(Controller):
-
-    def __init__(self, client , **kwargs):
+    
+    def __init__(self, client ,checkbox, **kwargs):
         Controller.__init__(self, **kwargs)
         self.client = client
+        self.checkbox = checkbox
+        self.motor_strength = 0
+        self.dir = 'stop'
+        self.coord = [0,0]
+        self.THRESHOLD = 30000
+
+    def checkSend(self,message):
+        if True:
+            self.client.send_message(message)
 
     def on_x_press(self):
-       print("Hello world")
-       self.client.send_message("power on")
+       self.checkSend("power on")
 
-    def on_x_release(self):
-       print("Goodbye world")
+    def on_square_press(self):
+        self.checkSend("power off")
+
+    def update_speed(self):
+        x, y = self.coord
+        if y > self.THRESHOLD:
+            self.dir = "right"
+        elif y < -self.THRESHOLD:
+            self.dir = "left"
+        elif x > self.THRESHOLD:
+            self.dir = "back"
+        elif x < -self.THRESHOLD:
+            self.dir = "forward"
+        else:
+            self.dir = "stop"
+            self.checkSend("move forward 0")
+            return
+
+        print("Update Speed")
+        print(self.dir)
+        print(self.motor_strength)
+        self.checkSend("move "+self.dir +" "+str(self.motor_strength))
+
+    def on_R3_up(self,value):
+        self.coord[0] = value
+        self.update_speed()
+
+    def on_R3_down(self,value):
+        self.coord[0] = value
+        self.update_speed()
+
+    def on_R3_left(self,value):
+        self.coord[1] = value
+        self.update_speed()
+
+    def on_R3_right(self,value):
+        self.coord[1] = value
+        self.update_speed()
+
+    def on_L3_up(self, value):
+        STRENGTH_DIVIDER = -330
+        print("Strength:")
+        print(round(value / STRENGTH_DIVIDER))
+        self.motor_strength = round(value / STRENGTH_DIVIDER)
+        self.update_speed()
+
+
+    
 
 class MainApp(QtWidgets.QMainWindow):
     def __init__(self):
@@ -56,7 +110,7 @@ class MainApp(QtWidgets.QMainWindow):
         self.show_connect_dialog()
 
     
-        self.controller = MyController(self.client,interface="/dev/input/js0", connecting_using_ds4drv=False)
+        self.controller = MyController(self.client, self.ui.WheelJoystickCheck,interface="/dev/input/js0", connecting_using_ds4drv=False)
 
         listen_thread = threading.Thread(target=self.controller.listen)
         # Start the thread
