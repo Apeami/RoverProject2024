@@ -1,3 +1,4 @@
+#/usr/bin/python3
 from PyQt5 import QtWidgets, uic, QtGui
 from PyQt5.QtCore import Qt
 
@@ -11,6 +12,45 @@ from commLaptop import Client
 import sys
 from pyPS4Controller.controller import Controller
 import threading
+
+import serial
+
+class SerialReader:
+    def __init__(self, port='/dev/ttyACM0', baudrate=9600, timeout=1, callback=None):
+
+        self.port = port
+        self.baudrate = baudrate
+        self.timeout = timeout
+
+        self.callback = callback
+        self.running = False
+        self.thread = threading.Thread(target=self.read_from_serial)
+    
+    def connect(self):
+        try:
+            self.ser = serial.Serial(self.port, self.baudrate, timeout=self.timeout)
+            return False
+        except:
+            return True
+
+    def start(self):
+        self.running = True
+        self.thread.start()
+    
+    def stop(self):
+        self.running = False
+        try:
+            self.thread.join()
+            self.ser.close()
+        except:
+            pass
+    
+    def read_from_serial(self):
+        while self.running:
+            line = self.ser.readline().decode('utf-8').rstrip()
+            if line and self.callback:
+                self.callback(line)
+
 
 
 class MyController(Controller):
@@ -77,12 +117,8 @@ class MyController(Controller):
         self.motor_strength = round(value / STRENGTH_DIVIDER)
         self.update_speed()
 
-
-    
-
 class MainApp(QtWidgets.QMainWindow):
-    def __init__(self):
-        
+    def __init__(self):     
         super(MainApp, self).__init__()
 
         self.ui = ui_MainWindow.Ui_MainWindow()
@@ -90,8 +126,6 @@ class MainApp(QtWidgets.QMainWindow):
 
         self.client = None
         self.connected = False
-
-
 
         self.selected_servo = 1
         self.key_to_servo = {
@@ -102,14 +136,32 @@ class MainApp(QtWidgets.QMainWindow):
             Qt.Key_5: 5,
             Qt.Key_6: 6
         }
-        self.servo_values = {i: 0 for i in range(1, 7)}
+        self.servo_values = {i: 1000 for i in range(1, 7)}
 
 
         self.power = False
 
         self.show_connect_dialog()
 
-    
+        self.armSerial = SerialReader(callback=self.virtualArm)
+        while self.armSerial.connect():
+            msg = QtWidgets.QMessageBox()
+            msg.setIcon(QtWidgets.QMessageBox.Critical)
+            msg.setText("Cannot Connect to the VArm")
+            msg.setWindowTitle("Can't Connect")
+            msg.addButton(QtWidgets.QMessageBox.Retry)
+            msg.addButton(QtWidgets.QMessageBox.Cancel)
+
+            button = msg.exec_()
+
+            if button == QtWidgets.QMessageBox.Cancel:
+                self.armSerial = None
+                self.ui.ArmVArmCheck.setEnabled(False)
+                break
+
+
+        self.armDataPrev = [[0,0,0,0,0],[0,0,0,0,0]]
+
         self.controller = MyController(self.client, self.ui.WheelJoystickCheck,interface="/dev/input/js0", connecting_using_ds4drv=False)
 
         listen_thread = threading.Thread(target=self.controller.listen)
@@ -129,6 +181,8 @@ class MainApp(QtWidgets.QMainWindow):
 
         self.ui.PowerIndicator.setText("Rover is Off")
 
+        self.ui.ArmVArmCheck.stateChanged.connect(self.arm_checkbox_state_changed)
+
         available_cameras = QCameraInfo.availableCameras()
         print(available_cameras)
         if not available_cameras:
@@ -139,6 +193,37 @@ class MainApp(QtWidgets.QMainWindow):
         self.camera.setViewfinder(self.ui.CameraView)  # Use the promoted widget
         # self.camera.setCaptureMode(QCamera.CaptureStillImage)
         self.camera.start()
+
+    def arm_checkbox_state_changed(self, state):
+        if self.ui.ArmVArmCheck.isChecked():
+            self.armSerial.start()
+        else:
+            self.armSerial.stop()
+            self.armSerial = SerialReader(callback=self.virtualArm)
+            self.armSerial.connect()
+
+    def virtualArm(self,data):
+        splitData = [int(number) for number in data.split(',')]
+        # print("Data")
+        # print(splitData)
+
+        self.averagedData = [0,0,0,0,0]
+        for i in range(5):
+            self.averagedData[i] = (splitData[i]+self.armDataPrev[1][i]+self.armDataPrev[0][i])/3
+            self.averagedData[i] = splitData[i]
+
+        self.armDataPrev[1]=self.armDataPrev[0]
+        self.armDataPrev[0]=splitData
+
+        for i in range(5):
+            self.servo_values[i+1] = round(500+ (self.averagedData[i]/1023) *2000)
+
+        print(self.servo_values)
+        self.client.send_message("arm "+str(self.servo_values[1])+" 1")
+        self.client.send_message("arm "+str(self.servo_values[2])+" 2")
+        self.client.send_message("arm "+str(self.servo_values[3])+" 3")
+        self.client.send_message("arm "+str(self.servo_values[4])+" 4")
+        self.client.send_message("arm "+str(self.servo_values[5])+" 5")
 
     def referesh(self):
         self.ui.RoverStatusBox.setPlainText(self.client.status)
@@ -179,16 +264,17 @@ class MainApp(QtWidgets.QMainWindow):
                 self.selected_servo = self.key_to_servo[key]
             
             if key == Qt.Key_R:
-                if self.servo_values[self.selected_servo] < 180:
-                    self.servo_values[self.selected_servo] += 1
+                if self.servo_values[self.selected_servo] < 2500:
+                    self.servo_values[self.selected_servo] += 10
                     self.client.send_message("arm "+str(self.servo_values[self.selected_servo])+" "+str(self.selected_servo))
             if key == Qt.Key_F:
-                self.client.send_message("arm 0 "+str(self.selected_servo))
-                self.servo_values[self.selected_servo] = 0
+                self.client.send_message("arm 1000 "+str(self.selected_servo))
+                self.servo_values[self.selected_servo] = 1000
             if key == Qt.Key_V:
-                if self.servo_values[self.selected_servo] > 0:
-                    self.servo_values[self.selected_servo] -= 1
+                if self.servo_values[self.selected_servo] > 500:
+                    self.servo_values[self.selected_servo] -= 10
                     self.client.send_message("arm "+str(self.servo_values[self.selected_servo])+" "+str(self.selected_servo))
+
 
 
     def send_message(self):
@@ -211,6 +297,7 @@ class MainApp(QtWidgets.QMainWindow):
             self.ui.ConnectionStatus.setText("Disconnected")
             if self.client!=None:
                 self.client.close()
+                
 
     def show_connect_dialog(self):
         if self.connected == False:
@@ -245,6 +332,8 @@ class MainApp(QtWidgets.QMainWindow):
         if self.client!=None:
             self.client.close()
 
+        if self.armSerial!=None:
+            self.armSerial.stop()
         self.camera.stop()
 
 if __name__ == "__main__":
