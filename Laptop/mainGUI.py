@@ -1,4 +1,4 @@
-#/usr/bin/python3
+#!/usr/bin/python3
 from PyQt5 import QtWidgets, uic, QtGui
 from PyQt5.QtCore import Qt
 
@@ -117,6 +117,8 @@ class MyController(Controller):
         self.motor_strength = round(value / STRENGTH_DIVIDER)
         self.update_speed()
 
+
+
 class MainApp(QtWidgets.QMainWindow):
     def __init__(self):     
         super(MainApp, self).__init__()
@@ -126,6 +128,8 @@ class MainApp(QtWidgets.QMainWindow):
 
         self.client = None
         self.connected = False
+
+        self.controller_connected = False
 
         self.selected_servo = 1
         self.key_to_servo = {
@@ -162,11 +166,48 @@ class MainApp(QtWidgets.QMainWindow):
 
         self.armDataPrev = [[0,0,0,0,0],[0,0,0,0,0]]
 
+
         self.controller = MyController(self.client, self.ui.WheelJoystickCheck,interface="/dev/input/js0", connecting_using_ds4drv=False)
 
-        listen_thread = threading.Thread(target=self.controller.listen)
+        self.listen_thread = threading.Thread(target=lambda: self.controller.listen(on_connect=self.controller_connect, on_disconnect=self.controller_disconnect, timeout=5))
         # Start the thread
-        listen_thread.start()
+        self.listen_thread.start()
+
+        msg = QtWidgets.QMessageBox()
+        msg.setIcon(QtWidgets.QMessageBox.Information)
+        msg.setText("Connect the controller")
+        msg.setWindowTitle("Connect")
+        msg.addButton(QtWidgets.QMessageBox.Ok)
+        msg.addButton(QtWidgets.QMessageBox.Cancel)
+
+        button = msg.exec_()
+        if button != QtWidgets.QMessageBox.Cancel:
+            while not self.controller_connected:
+                msg = QtWidgets.QMessageBox()
+                msg.setIcon(QtWidgets.QMessageBox.Critical)
+                msg.setText("Cannot Connect to the Controller")
+                msg.setWindowTitle("Can't Connect")
+                msg.addButton(QtWidgets.QMessageBox.Retry)
+                msg.addButton(QtWidgets.QMessageBox.Cancel)
+
+                button = msg.exec_()
+
+                if button == QtWidgets.QMessageBox.Cancel:
+                    self.controller = None
+                    self.ui.WheelJoystickCheck.setEnabled(False)
+                    break
+                elif button == QtWidgets.QMessageBox.Retry:
+                    self.listen_thread.join()
+                    self.controller = MyController(self.client, self.ui.WheelJoystickCheck,interface="/dev/input/js0", connecting_using_ds4drv=False)
+                    self.listen_thread = threading.Thread(target=lambda: self.controller.listen(on_connect=self.controller_connect, on_disconnect=self.controller_disconnect, timeout=5))
+                    self.listen_thread.start()
+                    import time
+                    time.sleep(1)
+        else:
+            self.controller = None
+            self.ui.WheelJoystickCheck.setEnabled(False)
+
+
 
         self.ui.ConnectButton.clicked.connect(self.show_connect_dialog)
         self.ui.DisconnectButton.clicked.connect(self.disconnect)
@@ -183,6 +224,8 @@ class MainApp(QtWidgets.QMainWindow):
 
         self.ui.ArmVArmCheck.stateChanged.connect(self.arm_checkbox_state_changed)
 
+        self.ui.ReconnectControllerButton.clicked.connect(self.reconnect_controller)
+
         available_cameras = QCameraInfo.availableCameras()
         print(available_cameras)
         if not available_cameras:
@@ -193,6 +236,65 @@ class MainApp(QtWidgets.QMainWindow):
         self.camera.setViewfinder(self.ui.CameraView)  # Use the promoted widget
         # self.camera.setCaptureMode(QCamera.CaptureStillImage)
         self.camera.start()
+
+        print("Done with setup")
+
+    def reconnect_controller(self):
+        print("Reconnecting")
+        self.listen_thread.join()
+        self.controller = MyController(self.client, self.ui.WheelJoystickCheck,interface="/dev/input/js0", connecting_using_ds4drv=False)
+        self.listen_thread = threading.Thread(target=lambda: self.controller.listen(on_connect=self.controller_connect, on_disconnect=self.controller_disconnect,timeout=5))
+        self.listen_thread.start()
+
+        import time
+        time.sleep(1)
+        if not self.controller_connected:
+            msg = QtWidgets.QMessageBox()
+            msg.setIcon(QtWidgets.QMessageBox.Critical)
+            msg.setText("Failed to connect controller, try again")
+            msg.setWindowTitle("Can't connect")
+            msg.addButton(QtWidgets.QMessageBox.Ok)
+
+            msg.exec_()
+
+    def controller_connect(self):
+        print("Controller connected")
+        self.controller_connected = True
+    
+    def controller_disconnect(self):
+        print("Controller disconnected")
+        self.controller_connected = False
+
+        msg = QtWidgets.QMessageBox()
+        msg.setIcon(QtWidgets.QMessageBox.Critical)
+        msg.setText("Controller Disconnected Press Reconnect Button")
+        msg.setWindowTitle("Disconnect")
+        msg.addButton(QtWidgets.QMessageBox.Ok)
+
+        msg.exec_()
+
+        print("Dones")
+
+        # while not self.controller_connected:
+        #     msg = QtWidgets.QMessageBox()
+        #     msg.setIcon(QtWidgets.QMessageBox.Critical)
+        #     msg.setText("Controller Disconnected")
+        #     msg.setWindowTitle("Disconnect")
+        #     msg.addButton(QtWidgets.QMessageBox.Retry)
+        #     msg.addButton(QtWidgets.QMessageBox.Cancel)
+
+        #     button = msg.exec_()
+
+        #     if button == QtWidgets.QMessageBox.Cancel:
+        #         self.controller = None
+        #         self.ui.WheelJoystickCheck.setEnabled(False)
+        #         break
+        #     elif button == QtWidgets.QMessageBox.Retry:
+        #         # self.listen_thread.join()
+        #         self.controller = MyController(self.client, self.ui.WheelJoystickCheck,interface="/dev/input/js0", connecting_using_ds4drv=False)
+        #         self.listen_thread = threading.Thread(target=lambda: self.controller.listen(on_connect=self.controller_connect, on_disconnect=self.controller_disconnect,timeout=5))
+        #         self.listen_thread.start()
+                
 
     def arm_checkbox_state_changed(self, state):
         if self.ui.ArmVArmCheck.isChecked():
@@ -334,7 +436,13 @@ class MainApp(QtWidgets.QMainWindow):
 
         if self.armSerial!=None:
             self.armSerial.stop()
-        self.camera.stop()
+        
+        if self.camera!= None:
+            self.camera.stop()
+
+        import sys
+        print("Exiting")
+        sys.exit(0)
 
 if __name__ == "__main__":
     print("Beginning GUI")
