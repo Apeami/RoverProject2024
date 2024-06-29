@@ -4,6 +4,7 @@ from PyQt5.QtCore import Qt
 
 from PyQt5.QtMultimedia import QCamera, QCameraInfo
 from PyQt5.QtMultimediaWidgets import QCameraViewfinder
+from PyQt5.QtWidgets import QApplication, QWidget
 
 import ui_MainWindow
 
@@ -14,6 +15,153 @@ from pyPS4Controller.controller import Controller
 import threading
 
 import serial
+
+from OpenGLWidget import OpenGLWidget
+from PyQt5.QtGui import QSurfaceFormat
+from PyQt5.QtCore import QTimer
+
+import math
+
+import ui_RoutePlanner
+
+class RoutePlanner(QWidget):
+    def __init__(self, mainGUI):
+        super().__init__()
+        self.mainGUI = mainGUI
+        
+        self.ui = ui_RoutePlanner.Ui_Form()
+        self.ui.setupUi(self)
+        self.setWindowTitle('RoutePlanner')
+
+        self.currentPathList = [(0,0),(1,1)]
+        self.currentLeg = 0
+        self.currentPoint = 0
+        self.actual_heading = 0
+        self.legprogressrem=1
+        self.currentTask = 'turn'
+
+        self.enabled=False
+        self.running = True
+        self.adding_points = True
+
+        self.ui.CancelButton.clicked.connect(self.cancel)
+        self.ui.StartButton.clicked.connect(self.start)
+        self.ui.PauseButton.clicked.connect(self.pause)
+        self.ui.RemoveButton.clicked.connect(self.del_waypoint)
+
+        self.timer = QTimer(self)
+        self.timer.timeout.connect(self.update_time)
+        self.timer.start(1000)
+
+        self.DEGPERSEC = 40
+        self.DISPERSEC = 0.3
+
+        self.show()
+
+    def update_time(self):
+        print("Timer")
+        if self.enabled and not self.adding_points:
+            if self.currentTask == 'turn':
+                print("Turning")
+                vector = (self.currentPathList[self.currentPoint+1][0]-self.currentPathList[self.currentPoint][0],self.currentPathList[self.currentPoint+1][1]-self.currentPathList[self.currentPoint][1])
+                self.desired_heading = math.atan2(vector[1], vector[0])
+                self.desired_heading = math.degrees(self.desired_heading)
+                print("Desired")
+                print(self.desired_heading)
+
+                angular_difference = (self.desired_heading - self.actual_heading) % 360
+                if angular_difference > 180:
+                    angular_difference -= 360
+
+                if angular_difference < 0:
+                    direction = "left"
+                    time = int(abs(angular_difference) / self.DEGPERSEC)*1000
+                    self.mainGUI.client.send_message("move left 100")
+                else:
+                    direction = "right"
+                    time = int(angular_difference / self.DEGPERSEC)*1000
+                    self.mainGUI.client.send_message("move right 100")
+
+                self.currentTask = 'afterturn'
+            elif self.currentTask == 'afterturn':
+                self.mainGUI.client.send_message("stop")
+                self.actual_heading = self.desired_heading
+                self.ui.PlanCanvas.update()
+                time = 1000
+                self.currentPoint+=1
+                self.currentTask='move'
+            elif self.currentTask=='move':
+                print("Moving")
+                legdis = math.sqrt((self.currentPathList[self.currentLeg+1][0]-self.currentPathList[self.currentLeg][0])**2 + (self.currentPathList[self.currentLeg+1][1]-self.currentPathList[self.currentLeg][1])**2)
+                print(legdis)
+                print(self.legprogressrem)
+                if self.legprogressrem * legdis > self.DISPERSEC:
+                    print("Notend")
+                    time = 1000
+                    self.mainGUI.client.send_message("move forward 100")
+                    self.legprogressrem -= self.DISPERSEC / legdis
+                    self.ui.PlanCanvas.update()
+                else:
+                    print("close to end")
+                    #Calculate smaller time
+                    time = int((self.legprogressrem* legdis*1000) / self.DISPERSEC)
+                    self.mainGUI.client.send_message("move forward 100")
+                    self.currentTask='aftermove'
+                    self.legprogressrem = 0
+                    self.ui.PlanCanvas.update()
+            elif self.currentTask=='aftermove':
+                self.mainGUI.client.send_message("stop")
+
+                if self.currentLeg + 2 == len(self.currentPathList):
+                    msg = QtWidgets.QMessageBox()
+                    msg.setIcon(QtWidgets.QMessageBox.Information)
+                    msg.setText("The Path has been finished")
+                    msg.setWindowTitle("Finished")
+                    msg.addButton(QtWidgets.QMessageBox.Ok)
+
+                    button = msg.exec_()
+                    self.cancel()
+
+                self.currentTask = 'turn'
+                self.currentLeg +=1
+                self.legprogressrem = 1
+                time = 1000
+        else:
+            time = 1000
+            self.mainGUI.client.send_message("stop")
+
+        if self.running:
+            self.timer.start(time)
+
+    def cancel(self):
+        self.close()
+        self.mainGUI.ui.WheelNoneCheck.setChecked(True)
+        self.enabled = False
+        self.running = False
+        self.timer.stop()
+        self.mainGUI.client.send_message("stop")
+
+    def start(self):
+        print("Start")
+        self.enabled=True
+
+    def pause(self):
+        print("Pause")
+        self.enabled=False
+
+    def add_waypoint(self, loc):
+        print("Adding")
+        print(loc)
+        print(self.ui.PlanCanvas.height())
+        print(self.ui.PlanCanvas.width())
+        self.currentPathList.append(((-loc.y()+(self.ui.PlanCanvas.height()/2))/100,(loc.x()-(self.ui.PlanCanvas.width()/2))/100))
+        print(self.currentPathList)
+        self.ui.PlanCanvas.update()
+
+    def del_waypoint(self):
+        if len(self.currentPathList)>=2:
+            self.currentPathList.pop()
+            self.ui.PlanCanvas.update()
 
 class SerialReader:
     def __init__(self, port='/dev/ttyACM0', baudrate=9600, timeout=1, callback=None):
@@ -222,9 +370,22 @@ class MainApp(QtWidgets.QMainWindow):
 
         self.ui.PowerIndicator.setText("Rover is Off")
 
-        self.ui.ArmVArmCheck.stateChanged.connect(self.arm_checkbox_state_changed)
+        self.ui.ArmVArmCheck.toggled.connect(self.arm_checkbox_state_changed)
+
+        self.ui.WheelAutomaticCheck.toggled.connect(self.enable_automatic)
 
         self.ui.ReconnectControllerButton.clicked.connect(self.reconnect_controller)
+
+        # fmt = QSurfaceFormat()
+        # fmt.setVersion(3, 3)
+        # fmt.setProfile(QSurfaceFormat.CoreProfile)
+        # QSurfaceFormat.setDefaultFormat(fmt)
+
+        # self.ui.openGLWidget = OpenGLWidget(parent = self.ui.Tab3d)
+        # self.timer = QTimer()
+        # self.timer.timeout.connect(self.ui.openGLWidget.update)
+        # self.timer.start(16)  # approximately 60 fps
+        # self.ui.openGLWidget.load_stl('canon.stl')
 
         available_cameras = QCameraInfo.availableCameras()
         print(available_cameras)
@@ -238,6 +399,13 @@ class MainApp(QtWidgets.QMainWindow):
         self.camera.start()
 
         print("Done with setup")
+
+    def enable_automatic(self):
+        if self.ui.WheelAutomaticCheck.isChecked():
+            self.route_planner = RoutePlanner(self)
+        else:
+            if self.route_planner!=None:
+                self.route_planner.cancel()
 
     def reconnect_controller(self):
         print("Reconnecting")
@@ -343,8 +511,7 @@ class MainApp(QtWidgets.QMainWindow):
     def keyReleaseEvent(self,event):
         if event.isAutoRepeat():
             return
-        print("released")
-        if event.key() in (Qt.Key_A, Qt.Key_D, Qt.Key_S, Qt.Key_W):
+        if event.key() in (Qt.Key_A, Qt.Key_D, Qt.Key_S, Qt.Key_W) and self.ui.WheelKeyboardCheck.isChecked():
             self.client.send_message("stop")
 
     def keyPressEvent(self, event):
@@ -381,14 +548,10 @@ class MainApp(QtWidgets.QMainWindow):
 
     def send_message(self):
         if self.client!=None:
-            print("Sending")
-            print(str(self.ui.commandText.text()))
             self.client.send_message(str(self.ui.commandText.text()))
 
     def openControl(self):
-        print("Opening Control")
         self.control = QtWidgets.QWidget()
-        
         uic.loadUi("ButtonControl.ui",self.control)
         self.control.setWindowTitle('Second Window')
         self.control.show()
