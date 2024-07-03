@@ -16,13 +16,16 @@ import threading
 
 import serial
 
-from OpenGLWidget import OpenGLWidget
+# from OpenGLWidget import OpenGLWidget
 from PyQt5.QtGui import QSurfaceFormat
 from PyQt5.QtCore import QTimer
 
 import math
 
 import ui_RoutePlanner
+
+DEFIP = 'localhost'
+DEFPORT = '6969'
 
 class RoutePlanner(QWidget):
     def __init__(self, mainGUI):
@@ -33,7 +36,7 @@ class RoutePlanner(QWidget):
         self.ui.setupUi(self)
         self.setWindowTitle('RoutePlanner')
 
-        self.currentPathList = [(0,0),(1,1)]
+        self.currentPathList = [(0,0)]
         self.currentLeg = 0
         self.currentPoint = 0
         self.actual_heading = 0
@@ -48,6 +51,9 @@ class RoutePlanner(QWidget):
         self.ui.StartButton.clicked.connect(self.start)
         self.ui.PauseButton.clicked.connect(self.pause)
         self.ui.RemoveButton.clicked.connect(self.del_waypoint)
+        self.ui.ZoomSlider.valueChanged.connect(self.update_slider)
+        self.ui.ResetButton.clicked.connect(self.reset_waypoint)
+        self.ui.ConfirmButton.clicked.connect(self.confirm_path)
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.update_time)
@@ -57,6 +63,28 @@ class RoutePlanner(QWidget):
         self.DISPERSEC = 0.3
 
         self.show()
+
+    def update_slider(self,val):
+        self.ui.PlanCanvas.update()
+
+    def confirm_path(self):
+        if self.adding_points:
+            if len(self.currentPathList)>=2:
+                self.adding_points = False
+            else:
+                msg = QtWidgets.QMessageBox()
+                msg.setIcon(QtWidgets.QMessageBox.Critical)
+                msg.setText("The path is not long enough")
+                msg.setWindowTitle("Invalid Path")
+                msg.addButton(QtWidgets.QMessageBox.Ok)
+                button = msg.exec_()
+        else:
+            msg = QtWidgets.QMessageBox()
+            msg.setIcon(QtWidgets.QMessageBox.Critical)
+            msg.setText("Cannot reset when path is confirmed already")
+            msg.setWindowTitle("Path is confirmed")
+            msg.addButton(QtWidgets.QMessageBox.Ok)
+            button = msg.exec_()
 
     def update_time(self):
         print("Timer")
@@ -142,26 +170,75 @@ class RoutePlanner(QWidget):
         self.mainGUI.client.send_message("stop")
 
     def start(self):
-        print("Start")
-        self.enabled=True
+        if not self.adding_points:
+            print("Start")
+            self.enabled=True
+        else:
+            msg = QtWidgets.QMessageBox()
+            msg.setIcon(QtWidgets.QMessageBox.Critical)
+            msg.setText("Path has to be confirmed to begin")
+            msg.setWindowTitle("Path is not confirmed")
+            msg.addButton(QtWidgets.QMessageBox.Ok)
+            button = msg.exec_()
 
     def pause(self):
-        print("Pause")
-        self.enabled=False
+        if not self.adding_points:
+            print("Pause")
+            self.enabled=False
+        else:
+            msg = QtWidgets.QMessageBox()
+            msg.setIcon(QtWidgets.QMessageBox.Critical)
+            msg.setText("Path has to be confirmed to begin")
+            msg.setWindowTitle("Path is not confirmed")
+            msg.addButton(QtWidgets.QMessageBox.Ok)
+            button = msg.exec_()
 
     def add_waypoint(self, loc):
-        print("Adding")
-        print(loc)
-        print(self.ui.PlanCanvas.height())
-        print(self.ui.PlanCanvas.width())
-        self.currentPathList.append(((-loc.y()+(self.ui.PlanCanvas.height()/2))/100,(loc.x()-(self.ui.PlanCanvas.width()/2))/100))
-        print(self.currentPathList)
-        self.ui.PlanCanvas.update()
+        if self.adding_points:
+            print(self.ui.ZoomSlider.value())
+            print("Adding")
+            print(loc)
+            print(self.ui.PlanCanvas.height())
+            print(self.ui.PlanCanvas.width())
+            self.currentPathList.append(((-loc[1]+(self.ui.PlanCanvas.height()/2))/self.ui.ZoomSlider.value(),(loc[0]-(self.ui.PlanCanvas.width()/2))/self.ui.ZoomSlider.value()))
+            print(self.currentPathList)
+            self.ui.PlanCanvas.update()
+            self.update_values()
+
+    def update_values(self):
+        point1 = self.currentPathList[-2]
+        point2 = self.currentPathList[-1]
+        distance = math.sqrt((point2[0] - point1[0])**2 + (point2[1] - point1[1])**2)
+        heading_radians = math.atan2(point2[1] - point1[1], point2[0] - point1[0])
+        heading_degrees = math.degrees(heading_radians)
+
+        self.ui.DistanceLabel.setText(str(round(distance,2))+" M")
+        self.ui.AngleLabel.setText(str(round(heading_degrees))+" Deg")
 
     def del_waypoint(self):
-        if len(self.currentPathList)>=2:
+        if len(self.currentPathList)>=2 and self.adding_points:
             self.currentPathList.pop()
             self.ui.PlanCanvas.update()
+            self.update_values()
+        else:
+            msg = QtWidgets.QMessageBox()
+            msg.setIcon(QtWidgets.QMessageBox.Critical)
+            msg.setText("Cannot reset when path is confirmed already")
+            msg.setWindowTitle("Path is confirmed")
+            msg.addButton(QtWidgets.QMessageBox.Ok)
+            button = msg.exec_()
+
+    def reset_waypoint(self):
+        if self.adding_points:
+            self.currentPathList = [(0,0)]
+            self.ui.PlanCanvas.update()
+        else:
+            msg = QtWidgets.QMessageBox()
+            msg.setIcon(QtWidgets.QMessageBox.Critical)
+            msg.setText("Cannot reset when path is confirmed already")
+            msg.setWindowTitle("Path is confirmed")
+            msg.addButton(QtWidgets.QMessageBox.Ok)
+            button = msg.exec_()
 
 class SerialReader:
     def __init__(self, port='/dev/ttyACM0', baudrate=9600, timeout=1, callback=None):
@@ -276,6 +353,7 @@ class MainApp(QtWidgets.QMainWindow):
 
         self.client = None
         self.connected = False
+        self.camera = None
 
         self.controller_connected = False
 
@@ -553,8 +631,28 @@ class MainApp(QtWidgets.QMainWindow):
     def openControl(self):
         self.control = QtWidgets.QWidget()
         uic.loadUi("ButtonControl.ui",self.control)
-        self.control.setWindowTitle('Second Window')
+        self.control.setWindowTitle('Button Control')
         self.control.show()
+
+        self.control.StopButton.clicked.connect(lambda: self.client.send_message("stop") if self.ui.WheelButtonsCheck.isChecked() else None)
+        self.control.ForwardButton.clicked.connect(lambda: self.client.send_message("move forward "+str(self.control.SpeedSlider.value())) if self.ui.WheelButtonsCheck.isChecked() else None)
+        self.control.BackButton.clicked.connect(lambda: self.client.send_message("move back "+str(self.control.SpeedSlider.value())) if self.ui.WheelButtonsCheck.isChecked() else None)
+        self.control.LeftButton.clicked.connect(lambda: self.client.send_message("move left "+str(self.control.SpeedSlider.value())) if self.ui.WheelButtonsCheck.isChecked() else None)
+        self.control.RightButton.clicked.connect(lambda: self.client.send_message("move right "+str(self.control.SpeedSlider.value())) if self.ui.WheelButtonsCheck.isChecked() else None)
+
+        self.servoStack = (None, self.control.Slider1 , self.control.Slider2 , self.control.Slider3 , self.control.Slider4 , self.control.Slider5 , self.control.Slider6)
+        self.control.Slider1.valueChanged.connect(lambda: self.sliderServo(1))
+        self.control.Slider2.valueChanged.connect(lambda: self.sliderServo(2))
+        self.control.Slider3.valueChanged.connect(lambda: self.sliderServo(3))
+        self.control.Slider4.valueChanged.connect(lambda: self.sliderServo(4))
+        self.control.Slider5.valueChanged.connect(lambda: self.sliderServo(5))
+        self.control.Slider6.valueChanged.connect(lambda: self.sliderServo(6))
+
+    def sliderServo(self,val):
+        if self.ui.ArmButtonsCheck.isChecked():
+            self.servo_values[val] = self.servoStack[val].value()
+            self.client.send_message("arm "+str(self.servo_values[val])+" "+str(val))
+
 
     def disconnect(self):
         if self.connected ==True:
@@ -562,7 +660,11 @@ class MainApp(QtWidgets.QMainWindow):
             self.ui.ConnectionStatus.setText("Disconnected")
             if self.client!=None:
                 self.client.close()
-                
+
+    def set_ip_and_port(self, ip_widget, port_widget):
+        ip_widget.setText(DEFIP)
+        port_widget.setText(DEFPORT) 
+                 
 
     def show_connect_dialog(self):
         if self.connected == False:
@@ -571,6 +673,8 @@ class MainApp(QtWidgets.QMainWindow):
 
             ip = dialog.findChild(QtWidgets.QLineEdit, 'IpEdit')
             port = dialog.findChild(QtWidgets.QLineEdit, 'PortEdit')
+
+            dialog.DefaultValueButton.clicked.connect(lambda: self.set_ip_and_port(ip,port))
 
             result = dialog.exec_() 
 

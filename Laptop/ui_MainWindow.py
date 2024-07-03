@@ -194,9 +194,9 @@ class Ui_MainWindow(object):
         self.Tab3d.setObjectName("Tab3d")
         self.gridLayout_2 = QtWidgets.QGridLayout(self.Tab3d)
         self.gridLayout_2.setObjectName("gridLayout_2")
-        self.openGLWidget = QtWidgets.QOpenGLWidget(self.Tab3d)
-        self.openGLWidget.setObjectName("openGLWidget")
-        self.gridLayout_2.addWidget(self.openGLWidget, 0, 0, 1, 1)
+        self.Animation = RoverAnimation(self.Tab3d)
+        self.Animation.setObjectName("Animation")
+        self.gridLayout_2.addWidget(self.Animation, 0, 0, 1, 1)
         self.tabWidget.addTab(self.Tab3d, "")
         self.gridLayout.addWidget(self.tabWidget, 1, 0, 1, 1)
         MainWindow.setCentralWidget(self.centralwidget)
@@ -242,3 +242,4 @@ class Ui_MainWindow(object):
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.CameraTab), _translate("MainWindow", "Tab 1"))
         self.tabWidget.setTabText(self.tabWidget.indexOf(self.Tab3d), _translate("MainWindow", "Tab 2"))
 from PyQt5.QtMultimediaWidgets import QCameraViewfinder
+from roveranimation import RoverAnimation

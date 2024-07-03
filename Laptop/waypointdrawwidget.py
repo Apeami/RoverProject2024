@@ -9,7 +9,9 @@ class WayPointDrawWidget(QWidget):
         super().__init__()
         self.initUI()
         self.routePlanner = routePlanner
-
+        self.translation_x = 0
+        self.translation_y = 0
+        self.dragging = False
 
     def initUI(self):
         self.setGeometry(100, 100, 800, 600)
@@ -21,6 +23,11 @@ class WayPointDrawWidget(QWidget):
 
         # Fill the background with black
         painter.fillRect(self.rect(), QBrush(Qt.black))
+
+        if not self.routePlanner.adding_points:
+            painter.translate(0, 0)
+        else:
+            painter.translate(self.translation_x, self.translation_y)
 
         # Draw the path lines
         painter.setPen(QPen(Qt.white, 5, Qt.SolidLine))
@@ -47,8 +54,8 @@ class WayPointDrawWidget(QWidget):
             currentPathList[i][1] = currentPathList[i][0] * sin_theta + currentPathList[i][1] * cos_theta
             currentPathList[i][0] = tmp
 
-            currentPathList[i][0] *=100
-            currentPathList[i][1] *=100
+            currentPathList[i][0] *= self.routePlanner.ui.ZoomSlider.value()
+            currentPathList[i][1] *=self.routePlanner.ui.ZoomSlider.value()
 
             currentPathList[i][0] +=self.width() // 2
             currentPathList[i][1] +=self.height() // 2
@@ -71,27 +78,50 @@ class WayPointDrawWidget(QWidget):
         painter.setBrush(QBrush(Qt.red, Qt.SolidPattern))
         painter.drawEllipse(QPoint(int(end_point[0]), int(end_point[1])), 10, 10)
 
-        # Set the pen and brush for the triangle
-        painter.setPen(QPen(Qt.blue, 1, Qt.SolidLine))
-        painter.setBrush(QBrush(Qt.blue, Qt.SolidPattern))
+        if not self.routePlanner.adding_points:
+            # Set the pen and brush for the triangle
+            painter.setPen(QPen(Qt.blue, 1, Qt.SolidLine))
+            painter.setBrush(QBrush(Qt.blue, Qt.SolidPattern))
 
-        # Define the points of the triangle
-        center_x, center_y = self.width() // 2, self.height() // 2
-        triangle_size = 10
-        points = [
-            QPoint(int(center_x), int(center_y - triangle_size)),
-            QPoint(int(center_x - triangle_size), int(center_y + triangle_size)),
-            QPoint(int(center_x + triangle_size), int(center_y + triangle_size))
-        ]
+            # Define the points of the triangle
+            center_x, center_y = self.width() // 2, self.height() // 2
+            triangle_size = 10
+            points = [
+                QPoint(int(center_x), int(center_y - triangle_size)),
+                QPoint(int(center_x - triangle_size), int(center_y + triangle_size)),
+                QPoint(int(center_x + triangle_size), int(center_y + triangle_size))
+            ]
 
-        # Draw the triangle
-        painter.drawPolygon(*points)
+            # Draw the triangle
+            painter.drawPolygon(*points)
 
     def mousePressEvent(self, event):
         # Get the position of the click
-        self.clicked_point = event.pos()
-        print(f"Clicked at: {self.clicked_point.x()}, {self.clicked_point.y()}")
+        if event.button() == Qt.LeftButton:
+            self.clicked_point = event.pos()
+            print(f"Clicked at: {self.clicked_point.x()}, {self.clicked_point.y()}")
+            newPos = [event.pos().x()- self.translation_x, event.pos().y()- self.translation_y]
 
-        self.routePlanner.add_waypoint(event.pos())
+            self.routePlanner.add_waypoint(newPos)
+
+        if event.button() == Qt.RightButton and self.routePlanner.adding_points:
+            self.last_mouse_position = event.pos()
+            self.dragging = True
+
+    def mouseMoveEvent(self, event):
+        if self.dragging:
+            # Calculate the distance moved
+            delta = event.pos() - self.last_mouse_position
+            # Update the translation values
+            self.translation_x += delta.x()
+            self.translation_y += delta.y()
+            # Update the last mouse position
+            self.last_mouse_position = event.pos()
+            # Repaint the widget
+            self.update()
+
+    def mouseReleaseEvent(self, event):
+        if event.button() == Qt.RightButton:
+            self.dragging = False
 
 
