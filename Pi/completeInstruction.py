@@ -46,10 +46,12 @@ class CompleteInstruction:
     def move(self, speed, side):
         print(f"The wheels are moving at speed {speed} on the {side}")
         if not TEST and self.power:
-            if side == 'forward':
-                self.pwm.setServoPulse(0,speed)
-            if side == 'back':
-                self.pwm.setServoPulse(0,-speed)
+            if side == "forward":
+                print("Going forward")
+                self.pwm.setServoPulse(4,(int(speed)*12)+100)
+            if side == "back":
+                self.pwm.setServoPulse(4,(int(speed)*12)+1300)
+                print("Going Backward")
 
     def arm(self, angle, servo):
         print(f"The Arm's servo {servo} is at angle {angle}")
@@ -58,7 +60,10 @@ class CompleteInstruction:
 
     def powerSet(self, status):
         print(f"The rover's power is {status}")
-        self.power_status = status
+        if status=="on":
+            self.power=True
+        else:
+            self.power=False
 
     def get_status(self):
         uptime = time.monotonic()

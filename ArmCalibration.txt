@@ -1,0 +1,45 @@
+--------------------
+--------Base--------
+--------------------
+Varm =>
+    Straight - 1540
+    Back     -
+    Front    -
+Real =>
+    Straight - 1480
+    Back     -
+    Front    -
+
+--------------------
+-------Joint1-------
+--------------------
+Varm =>
+    Straight - 1510
+    Back     - 970
+    Front    -
+Real =>
+    Straight - 1610
+    Back     -680
+    Front    -
+
+--------------------
+-------Joint2-------
+--------------------
+Varm =>
+    Straight - 1400
+    90deg     - 2070
+Real =>
+    Straight - 1330
+    90deg     - 2470
+
+--------------------
+---------End--------
+--------------------
+Varm =>
+    Straight - 1340
+    Back     - 2900
+    Front    -
+Real =>
+    Straight - 1390
+    Back     - 2370
+    Front    -

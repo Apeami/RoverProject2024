@@ -5,7 +5,7 @@ from PyQt5.QtGui import QSurfaceFormat
 from OpenGL.GL import *
 from OpenGL.GLU import gluPerspective
 import numpy as np
-from stl import mesh
+# from stl import mesh
 
 class RoverAnimation(QOpenGLWidget):
     def __init__(self, parent):

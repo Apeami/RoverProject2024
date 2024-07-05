@@ -147,6 +147,12 @@
       <layout class="QHBoxLayout" name="horizontalLayout">
        <item>
         <widget class="QSlider" name="Slider1">
+         <property name="minimum">
+          <number>500</number>
+         </property>
+         <property name="maximum">
+          <number>2500</number>
+         </property>
          <property name="orientation">
           <enum>Qt::Vertical</enum>
          </property>
@@ -154,6 +160,12 @@
        </item>
        <item>
         <widget class="QSlider" name="Slider2">
+         <property name="minimum">
+          <number>500</number>
+         </property>
+         <property name="maximum">
+          <number>2500</number>
+         </property>
          <property name="orientation">
           <enum>Qt::Vertical</enum>
          </property>
@@ -161,6 +173,12 @@
        </item>
        <item>
         <widget class="QSlider" name="Slider3">
+         <property name="minimum">
+          <number>500</number>
+         </property>
+         <property name="maximum">
+          <number>2500</number>
+         </property>
          <property name="orientation">
           <enum>Qt::Vertical</enum>
          </property>
@@ -168,6 +186,12 @@
        </item>
        <item>
         <widget class="QSlider" name="Slider4">
+         <property name="minimum">
+          <number>500</number>
+         </property>
+         <property name="maximum">
+          <number>2500</number>
+         </property>
          <property name="orientation">
           <enum>Qt::Vertical</enum>
          </property>
@@ -175,6 +199,12 @@
        </item>
        <item>
         <widget class="QSlider" name="Slider5">
+         <property name="minimum">
+          <number>500</number>
+         </property>
+         <property name="maximum">
+          <number>2500</number>
+         </property>
          <property name="orientation">
           <enum>Qt::Vertical</enum>
          </property>
@@ -182,6 +212,12 @@
        </item>
        <item>
         <widget class="QSlider" name="Slider6">
+         <property name="minimum">
+          <number>500</number>
+         </property>
+         <property name="maximum">
+          <number>2500</number>
+         </property>
          <property name="orientation">
           <enum>Qt::Vertical</enum>
          </property>

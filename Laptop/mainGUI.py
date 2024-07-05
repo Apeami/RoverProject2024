@@ -24,7 +24,7 @@ import math
 
 import ui_RoutePlanner
 
-DEFIP = 'localhost'
+DEFIP = '192.168.1.98'
 DEFPORT = '6969'
 
 class RoutePlanner(QWidget):
@@ -550,6 +550,13 @@ class MainApp(QtWidgets.QMainWindow):
             self.armSerial = SerialReader(callback=self.virtualArm)
             self.armSerial.connect()
 
+    def map_range(self, value, from_min, from_max, to_min, to_max):
+        # Calculate the scaling factor
+        scale = (to_max - to_min) / (from_max - from_min)
+        # Map the value to the new range
+        mapped_value = to_min + (value - from_min) * scale
+        return mapped_value
+
     def virtualArm(self,data):
         splitData = [int(number) for number in data.split(',')]
         # print("Data")
@@ -563,15 +570,37 @@ class MainApp(QtWidgets.QMainWindow):
         self.armDataPrev[1]=self.armDataPrev[0]
         self.armDataPrev[0]=splitData
 
-        for i in range(5):
-            self.servo_values[i+1] = round(500+ (self.averagedData[i]/1023) *2000)
+        # invertedServo = (1,2,5)
+        # for i in range(5):
+        #     if i+1 not in invertedServo:
+        #         self.servo_values[i+1] = round(500+ (self.averagedData[i]/1023) *2000)
+        #     else: 
+        #         self.servo_values[i+1] = round(2500 - (self.averagedData[i] / 1023) * 2000)
+        self.servo_values[1] = round(2500 - (self.averagedData[0] / 1023) * 2000)
+        self.servo_values[2] = round(500+ (self.averagedData[1]/1023) *2000)
+        self.servo_values[3] = round(2500 - (self.averagedData[2] / 1023) * 2000)
+        self.servo_values[5] = round(2500 - (self.averagedData[4] / 1023) * 2000)
 
-        print(self.servo_values)
+        self.servo_values[3] = round(self.map_range(self.servo_values[3], 1400, 2070, 1330, 2470))
+        self.servo_values[2] = round(self.map_range(self.servo_values[2], 970, 1510, 680, 1610))
+        self.servo_values[5] = round(self.map_range(self.servo_values[5], 1340, 2900, 1390, 2370))
+
+
+        # print(self.servo_values)
         self.client.send_message("arm "+str(self.servo_values[1])+" 1")
         self.client.send_message("arm "+str(self.servo_values[2])+" 2")
         self.client.send_message("arm "+str(self.servo_values[3])+" 3")
-        self.client.send_message("arm "+str(self.servo_values[4])+" 4")
-        self.client.send_message("arm "+str(self.servo_values[5])+" 5")
+        self.client.send_message("arm "+str(self.servo_values[5])+" 4")
+
+        print("Arm Sending Values")
+        print("BaseServo")
+        print(self.servo_values[1])
+        print("Arm1Servo")
+        print(self.servo_values[2])
+        print("Arm2Servo")
+        print(self.servo_values[3])
+        print("TopServo")
+        print(self.servo_values[5])
 
     def referesh(self):
         self.ui.RoverStatusBox.setPlainText(self.client.status)
@@ -598,13 +627,13 @@ class MainApp(QtWidgets.QMainWindow):
 
         if self.ui.WheelKeyboardCheck.isChecked():
             if key == Qt.Key_W:
-                self.client.send_message("move forward 50")
+                self.client.send_message("move forward 100")
             elif key == Qt.Key_A:
-                self.client.send_message("move left 50")
+                self.client.send_message("move left 100")
             elif key == Qt.Key_S:
-                self.client.send_message("move back 50")
+                self.client.send_message("move back 100")
             elif key == Qt.Key_D:
-                self.client.send_message("move right 50")
+                self.client.send_message("move right 100")
 
         if self.ui.ArmKeyboardCheck.isChecked():
             if key in self.key_to_servo:
