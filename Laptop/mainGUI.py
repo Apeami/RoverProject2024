@@ -28,8 +28,9 @@ import time
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
-DEFIP = '10.42.0.1'
+DEFIP = '192.168.10.1'
 DEFPORT = '6969'
+VARMPORT = '/dev/ttyACM0'
 
 class RoutePlanner(QWidget):
     def __init__(self, mainGUI):
@@ -245,7 +246,7 @@ class RoutePlanner(QWidget):
             button = msg.exec_()
 
 class SerialReader:
-    def __init__(self, port='/dev/pts/2', baudrate=9600, timeout=1, callback=None):
+    def __init__(self, port='/dev/ttyACM0', baudrate=9600, timeout=1, callback=None):
 
         self.port = port
         self.baudrate = baudrate
@@ -358,6 +359,8 @@ class ArmCalibrator(QWidget):
         self.serial = serial
         self.mainGUI = mainGUI
 
+        self.prevChecked = [False,False,False,False]
+
         self.PATHUNCHECKED = QPixmap("/usr/share/icons/Adwaita/32x32/ui/checkbox-symbolic.symbolic.png")
         self.PATHCHECKED = QPixmap("/usr/share/icons/Adwaita/32x32/ui/checkbox-checked-symbolic.symbolic.png")
 
@@ -377,38 +380,52 @@ class ArmCalibrator(QWidget):
 
         self.BaseBar.setValue(data[1])
         if data[1]>1300 and data[1]< 1700:
-            self.BaseIcon.setPixmap(self.PATHCHECKED)
+#            self.BaseIcon.setPixmap(self.PATHCHECKED)
+            print("SET CHECKED1")
         else:
-            self.BaseIcon.setPixmap(self.PATHUNCHECKED)
+#            self.BaseIcon.setPixmap(self.PATHUNCHECKED)
+            print("SET UNCHECKED1")
             allset = False
 
         self.Joint1Bar.setValue(data[2])
         if data[2]>1300 and data[2]< 1700:
-            self.Joint1Icon.setPixmap(self.PATHCHECKED)
+#            self.Joint1Icon.setPixmap(self.PATHCHECKED)
+            print("SET CHECKED2")
         else:
-            self.Joint1Icon.setPixmap(self.PATHUNCHECKED)
+#            self.Joint1Icon.setPixmap(self.PATHUNCHECKED)
+            print("SET UNCHECKED2")
             allset = False
 
         self.Joint2Bar.setValue(data[3])
         if data[3]>1300 and data[3]< 1700:
-            self.Joint2Icon.setPixmap(self.PATHCHECKED)
+#            self.Joint2Icon.setPixmap(self.PATHCHECKED)
+            print("SET CHECKED3")
         else:
-            self.Joint2Icon.setPixmap(self.PATHUNCHECKED)
+#            self.Joint2Icon.setPixmap(self.PATHUNCHECKED)
+            print("SET UNCHECKED3")
+            allset = False
+         
+        
+        self.EndBar.setValue(data[4])
+        print("AFTER SET")
+        if data[4]>1300 and data[4]< 1700 and self.prevChecked[3] == False:
+#            self.EndIcon.setPixmap(self.PATHCHECKED)
+            print("SET CHECKED4")
+        else:
+#            self.EndIcon.setPixmap(self.PATHUNCHECKED)
+            print("SET UNCHECKED4")
             allset = False
 
-        self.EndBar.setValue(data[4])
-        if data[4]>1300 and data[4]< 1700:
-            self.EndIcon.setPixmap(self.PATHCHECKED)
-        else:
-            self.EndIcon.setPixmap(self.PATHUNCHECKED)
-            allset = False
+        print("END CHANGING")
 
         if allset == True:
             print("AllCalibrated")
             self.calibrated = True
             self.DoneButton.setEnabled(True)
             self.DoneButton.clicked.connect(self.close)
-            QTimer.singleShot(2000, self.close)
+
+            self.close()
+            
         else:
             if not self.isVisible():
                 self.show()
@@ -662,7 +679,7 @@ class MainApp(QtWidgets.QMainWindow):
             self.client.send_message("arm "+str(self.servo_values[1])+" 1")
             self.client.send_message("arm "+str(self.servo_values[2])+" 2")
             self.client.send_message("arm "+str(self.servo_values[3])+" 3")
-            self.client.send_message("arm "+str(self.servo_values[5])+" 4")
+            self.client.send_message("arm "+str(self.servo_values[4])+" 4")
 
             print("Arm Sending Values")
             print("BaseServo")
@@ -672,7 +689,7 @@ class MainApp(QtWidgets.QMainWindow):
             print("Arm2Servo")
             print(self.servo_values[3])
             print("TopServo")
-            print(self.servo_values[5])
+            print(self.servo_values[4])
 
     def referesh(self):
         self.ui.RoverStatusBox.setPlainText(self.client.status)
