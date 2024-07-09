@@ -6,7 +6,9 @@ import time
 if not TEST:
     import PCA9685_v4_armtest
 
-
+SERVOBASE = 4
+MOTORA = 2
+MOTORB = 3
 
 class CompleteInstruction:
     def __init__(self):
@@ -22,7 +24,6 @@ class CompleteInstruction:
             return ""
         
         command, *arguments = words
-
 
         if command == "status":
             return self.get_status()
@@ -41,29 +42,40 @@ class CompleteInstruction:
         return "None"
 
     def stop(self):
-        print("Rover Stopping")
+        print("Stop")
+        if not TEST:
+            self.pwm.setServoPulse(5, 1500)
+            self.pwm.setServoPulse(6, 1500)
 
-    def move(self, speed, side):
-        print(f"The wheels are moving at speed {speed} on the {side}")
+    def move(self, side, speed):
+        print(f"Move. Speed:{speed}. Side:{side}")
         if not TEST and self.power:
+            speed = 2*min(200, int(speed))
             if side == "forward":
-                print("Going forward")
-                self.pwm.setServoPulse(4,(int(speed)*12)+100)
-            if side == "back":
-                self.pwm.setServoPulse(4,(int(speed)*12)+1300)
-                print("Going Backward")
+                self.pwm.setServoPulse(MOTORA,1500+speed)
+                self.pwm.setServoPulse(MOTORB,1500+speed)
+            elif side == "back":
+                self.pwm.setServoPulse(MOTORA,1500-speed)
+                self.pwm.setServoPulse(MOTORB,1500-speed)
+            elif side == "left":
+                self.pwm.setServoPulse(MOTORA,1500-speed)
+                self.pwm.setServoPulse(MOTORB,1500+speed)
+            elif side == "right":
+                self.pwm.setServoPulse(MOTORA,1500+speed)
+                self.pwm.setServoPulse(MOTORB,1500-speed)
 
     def arm(self, angle, servo):
-        print(f"The Arm's servo {servo} is at angle {angle}")
+        print(f"Arm. Servo:{servo}. Angle:{angle}")
         if not TEST and self.power:
-            self.pwm.setServoPulse(int(servo),int(angle))
+            self.pwm.setServoPulse(int(servo) + SERVOBASE,int(angle))
 
     def powerSet(self, status):
-        print(f"The rover's power is {status}")
+        print(f"Power: {status}")
         if status=="on":
             self.power=True
         else:
             self.power=False
+
 
     def get_status(self):
         uptime = time.monotonic()

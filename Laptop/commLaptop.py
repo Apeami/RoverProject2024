@@ -5,15 +5,17 @@ import threading
 COMMANDLIST = {"move", "arm", "power", "status"}
 
 class Client:
-    def __init__(self, host, port):
+    def __init__(self, host, port, disconnect_handle):
         self.host = host
         self.port = int(port)
         self.client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.lock = threading.Lock()
         self.enabled=False
         self.status = ""
+        self.disconnect_handle = disconnect_handle
     
     def connect(self):
+        self.client_socket.settimeout(3)
         try:
             self.client_socket.connect((self.host, self.port))
         except ConnectionRefusedError:
@@ -34,17 +36,20 @@ class Client:
         with self.lock:
             try:
                 self.client_socket.send(message.encode())
+                response = self.client_socket.recv(1024).decode()
             except:
                 print("Closing due to a disconnect. Type refresh to reconnect!")
                 self.enabled=False
-            response = self.client_socket.recv(1024).decode()
-            # if response!="None":
-            #     print(response)
+                self.disconnect_handle()
+                return ""
+
             return response
+
+
 
     def send_message_thread(self):
         while self.enabled:
-            message = "status"
+            message = "\0"
             self.status = self.send_message(message)
             time.sleep(2)  # Send message every second
 

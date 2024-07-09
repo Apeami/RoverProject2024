@@ -32,7 +32,8 @@ class Server:
             try:
                 data = self.client_socket.recv(1024).decode()
             except socket.timeout:
-                print("Disconnect")
+                print("Disconnect. Stopping all motors")
+                self.rover.stop()
                 break
             if not data:
                 break
@@ -50,7 +51,7 @@ class Server:
         self.server_socket.close()
 
 if __name__ == "__main__":
-    SERVER_IP = 'localhost'  
+    SERVER_IP = '0.0.0.0'  
     SERVER_PORT = 6969
     server = Server(SERVER_IP, SERVER_PORT)
     try:

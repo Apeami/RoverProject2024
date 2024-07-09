@@ -17,14 +17,18 @@ import threading
 import serial
 
 # from OpenGLWidget import OpenGLWidget
-from PyQt5.QtGui import QSurfaceFormat
+from PyQt5.QtGui import QSurfaceFormat, QPixmap
 from PyQt5.QtCore import QTimer
 
 import math
 
 import ui_RoutePlanner
 
-DEFIP = '192.168.1.98'
+import time
+
+from PyQt5.QtCore import QThread, pyqtSignal
+
+DEFIP = '10.42.0.1'
 DEFPORT = '6969'
 
 class RoutePlanner(QWidget):
@@ -241,7 +245,7 @@ class RoutePlanner(QWidget):
             button = msg.exec_()
 
 class SerialReader:
-    def __init__(self, port='/dev/ttyACM0', baudrate=9600, timeout=1, callback=None):
+    def __init__(self, port='/dev/pts/2', baudrate=9600, timeout=1, callback=None):
 
         self.port = port
         self.baudrate = baudrate
@@ -342,9 +346,76 @@ class MyController(Controller):
         self.motor_strength = round(value / STRENGTH_DIVIDER)
         self.update_speed()
 
+class ArmCalibrator(QWidget):
 
+
+    def __init__(self, serial, mainGUI):
+        super().__init__()
+        uic.loadUi("ArmCalibrate.ui",self)
+        self.setWindowTitle('Button Control')
+        self.calibrated=False
+
+        self.serial = serial
+        self.mainGUI = mainGUI
+
+        self.PATHUNCHECKED = QPixmap("/usr/share/icons/Adwaita/32x32/ui/checkbox-symbolic.symbolic.png")
+        self.PATHCHECKED = QPixmap("/usr/share/icons/Adwaita/32x32/ui/checkbox-checked-symbolic.symbolic.png")
+
+
+    def reset_calibration(self):
+        self.calibrated=False
+        self.DoneButton.setEnabled(False)
+
+    def cancel(self):
+        self.calibrated = False
+        #self.mainGUI.ui.ArmNoneCheck.setChecked(True)
+
+    def calibration_callback(self,data):
+        print("Calibration Data")
+        print(data)
+        allset = True
+
+        self.BaseBar.setValue(data[1])
+        if data[1]>1300 and data[1]< 1700:
+            self.BaseIcon.setPixmap(self.PATHCHECKED)
+        else:
+            self.BaseIcon.setPixmap(self.PATHUNCHECKED)
+            allset = False
+
+        self.Joint1Bar.setValue(data[2])
+        if data[2]>1300 and data[2]< 1700:
+            self.Joint1Icon.setPixmap(self.PATHCHECKED)
+        else:
+            self.Joint1Icon.setPixmap(self.PATHUNCHECKED)
+            allset = False
+
+        self.Joint2Bar.setValue(data[3])
+        if data[3]>1300 and data[3]< 1700:
+            self.Joint2Icon.setPixmap(self.PATHCHECKED)
+        else:
+            self.Joint2Icon.setPixmap(self.PATHUNCHECKED)
+            allset = False
+
+        self.EndBar.setValue(data[4])
+        if data[4]>1300 and data[4]< 1700:
+            self.EndIcon.setPixmap(self.PATHCHECKED)
+        else:
+            self.EndIcon.setPixmap(self.PATHUNCHECKED)
+            allset = False
+
+        if allset == True:
+            print("AllCalibrated")
+            self.calibrated = True
+            self.DoneButton.setEnabled(True)
+            self.DoneButton.clicked.connect(self.close)
+            QTimer.singleShot(2000, self.close)
+        else:
+            if not self.isVisible():
+                self.show()
 
 class MainApp(QtWidgets.QMainWindow):
+    disconnection_detected = pyqtSignal()
+
     def __init__(self):     
         super(MainApp, self).__init__()
 
@@ -388,6 +459,9 @@ class MainApp(QtWidgets.QMainWindow):
                 self.armSerial = None
                 self.ui.ArmVArmCheck.setEnabled(False)
                 break
+
+        self.armCalibrateWindow = ArmCalibrator(self.armSerial, self)
+
 
 
         self.armDataPrev = [[0,0,0,0,0],[0,0,0,0,0]]
@@ -448,11 +522,15 @@ class MainApp(QtWidgets.QMainWindow):
 
         self.ui.PowerIndicator.setText("Rover is Off")
 
-        self.ui.ArmVArmCheck.toggled.connect(self.arm_checkbox_state_changed)
+        #self.ui.ArmVArmCheck.toggled.connect(self.arm_checkbox_state_changed)
 
         self.ui.WheelAutomaticCheck.toggled.connect(self.enable_automatic)
 
+        self.ui.ArmVArmCheck.toggled.connect(self.enable_varm)
+
         self.ui.ReconnectControllerButton.clicked.connect(self.reconnect_controller)
+
+        self.disconnection_detected.connect(self.disconnect_message)
 
         # fmt = QSurfaceFormat()
         # fmt.setVersion(3, 3)
@@ -478,6 +556,27 @@ class MainApp(QtWidgets.QMainWindow):
 
         print("Done with setup")
 
+    def enable_varm(self):
+        if self.ui.ArmVArmCheck.isChecked():
+            print("Enabling VArm")    
+            #self.armCalibrateWindow.reset_calibration()
+            self.armSerial.start()
+        else:
+            print("Disabling VArm")
+            self.armCalibrateWindow.close()
+            self.armSerial.stop()
+            self.armSerial = SerialReader(callback=self.virtualArm)
+            self.armSerial.connect()
+            self.armCalibrateWindow.reset_calibration()
+
+    # def arm_checkbox_state_changed(self, state):
+    #     if self.ui.ArmVArmCheck.isChecked():
+    #         self.armSerial.start()
+    #     else:
+    #         self.armSerial.stop()
+    #         self.armSerial = SerialReader(callback=self.virtualArm)
+    #         self.armSerial.connect()
+
     def enable_automatic(self):
         if self.ui.WheelAutomaticCheck.isChecked():
             self.route_planner = RoutePlanner(self)
@@ -486,13 +585,12 @@ class MainApp(QtWidgets.QMainWindow):
                 self.route_planner.cancel()
 
     def reconnect_controller(self):
-        print("Reconnecting")
+        print("Reconnecting Controller")
         self.listen_thread.join()
         self.controller = MyController(self.client, self.ui.WheelJoystickCheck,interface="/dev/input/js0", connecting_using_ds4drv=False)
         self.listen_thread = threading.Thread(target=lambda: self.controller.listen(on_connect=self.controller_connect, on_disconnect=self.controller_disconnect,timeout=5))
         self.listen_thread.start()
 
-        import time
         time.sleep(1)
         if not self.controller_connected:
             msg = QtWidgets.QMessageBox()
@@ -519,37 +617,6 @@ class MainApp(QtWidgets.QMainWindow):
 
         msg.exec_()
 
-        print("Dones")
-
-        # while not self.controller_connected:
-        #     msg = QtWidgets.QMessageBox()
-        #     msg.setIcon(QtWidgets.QMessageBox.Critical)
-        #     msg.setText("Controller Disconnected")
-        #     msg.setWindowTitle("Disconnect")
-        #     msg.addButton(QtWidgets.QMessageBox.Retry)
-        #     msg.addButton(QtWidgets.QMessageBox.Cancel)
-
-        #     button = msg.exec_()
-
-        #     if button == QtWidgets.QMessageBox.Cancel:
-        #         self.controller = None
-        #         self.ui.WheelJoystickCheck.setEnabled(False)
-        #         break
-        #     elif button == QtWidgets.QMessageBox.Retry:
-        #         # self.listen_thread.join()
-        #         self.controller = MyController(self.client, self.ui.WheelJoystickCheck,interface="/dev/input/js0", connecting_using_ds4drv=False)
-        #         self.listen_thread = threading.Thread(target=lambda: self.controller.listen(on_connect=self.controller_connect, on_disconnect=self.controller_disconnect,timeout=5))
-        #         self.listen_thread.start()
-                
-
-    def arm_checkbox_state_changed(self, state):
-        if self.ui.ArmVArmCheck.isChecked():
-            self.armSerial.start()
-        else:
-            self.armSerial.stop()
-            self.armSerial = SerialReader(callback=self.virtualArm)
-            self.armSerial.connect()
-
     def map_range(self, value, from_min, from_max, to_min, to_max):
         # Calculate the scaling factor
         scale = (to_max - to_min) / (from_max - from_min)
@@ -557,50 +624,55 @@ class MainApp(QtWidgets.QMainWindow):
         mapped_value = to_min + (value - from_min) * scale
         return mapped_value
 
+    def map_vArm_servo(self, inData):
+        outData = [0,0,0,0,0,0]
+        outData[1] = round(2500 - (int(inData[0]) / 1023) * 2000)
+        outData[2] = round(500+ (int(inData[1])/1023) *2000)
+        outData[3] = round(2500 - (int(inData[2]) / 1023) * 2000)
+        outData[4] = round(2500 - (int(inData[4]) / 1023) * 2000)
+
+        outData[3] = round(self.map_range(outData[3], 1400, 2070, 1330, 2470))
+        outData[2] = round(self.map_range(outData[2], 970, 1510, 680, 1610))
+        outData[4] = round(self.map_range(outData[4], 1340, 2900, 1390, 2370))
+        return outData
+
     def virtualArm(self,data):
-        splitData = [int(number) for number in data.split(',')]
-        # print("Data")
-        # print(splitData)
+        if not self.armCalibrateWindow.calibrated:
+            print("Calibrating")
+            data = [int(number) for number in data.split(',')]
+            data = self.map_vArm_servo(data)
+            self.armCalibrateWindow.calibration_callback(data)
+        else:
+            print("NOT calibrating")
+            splitData = [int(number) for number in data.split(',')]
+            print("Data")
+            print(splitData)
 
-        self.averagedData = [0,0,0,0,0]
-        for i in range(5):
-            self.averagedData[i] = (splitData[i]+self.armDataPrev[1][i]+self.armDataPrev[0][i])/3
-            self.averagedData[i] = splitData[i]
+            self.averagedData = [0,0,0,0,0]
+            for i in range(5):
+                self.averagedData[i] = (splitData[i]+self.armDataPrev[1][i]+self.armDataPrev[0][i])/3
+                self.averagedData[i] = splitData[i]
 
-        self.armDataPrev[1]=self.armDataPrev[0]
-        self.armDataPrev[0]=splitData
+            self.armDataPrev[1]=self.armDataPrev[0]
+            self.armDataPrev[0]=splitData
 
-        # invertedServo = (1,2,5)
-        # for i in range(5):
-        #     if i+1 not in invertedServo:
-        #         self.servo_values[i+1] = round(500+ (self.averagedData[i]/1023) *2000)
-        #     else: 
-        #         self.servo_values[i+1] = round(2500 - (self.averagedData[i] / 1023) * 2000)
-        self.servo_values[1] = round(2500 - (self.averagedData[0] / 1023) * 2000)
-        self.servo_values[2] = round(500+ (self.averagedData[1]/1023) *2000)
-        self.servo_values[3] = round(2500 - (self.averagedData[2] / 1023) * 2000)
-        self.servo_values[5] = round(2500 - (self.averagedData[4] / 1023) * 2000)
+            self.servo_values = self.map_vArm_servo(self.averagedData)
 
-        self.servo_values[3] = round(self.map_range(self.servo_values[3], 1400, 2070, 1330, 2470))
-        self.servo_values[2] = round(self.map_range(self.servo_values[2], 970, 1510, 680, 1610))
-        self.servo_values[5] = round(self.map_range(self.servo_values[5], 1340, 2900, 1390, 2370))
+            #Send the servo values
+            self.client.send_message("arm "+str(self.servo_values[1])+" 1")
+            self.client.send_message("arm "+str(self.servo_values[2])+" 2")
+            self.client.send_message("arm "+str(self.servo_values[3])+" 3")
+            self.client.send_message("arm "+str(self.servo_values[5])+" 4")
 
-
-        # print(self.servo_values)
-        self.client.send_message("arm "+str(self.servo_values[1])+" 1")
-        self.client.send_message("arm "+str(self.servo_values[2])+" 2")
-        self.client.send_message("arm "+str(self.servo_values[3])+" 3")
-        self.client.send_message("arm "+str(self.servo_values[5])+" 4")
-
-        print("Arm Sending Values")
-        print("BaseServo")
-        print(self.servo_values[1])
-        print("Arm1Servo")
-        print(self.servo_values[2])
-        print("Arm2Servo")
-        print(self.servo_values[3])
-        print("TopServo")
-        print(self.servo_values[5])
+            print("Arm Sending Values")
+            print("BaseServo")
+            print(self.servo_values[1])
+            print("Arm1Servo")
+            print(self.servo_values[2])
+            print("Arm2Servo")
+            print(self.servo_values[3])
+            print("TopServo")
+            print(self.servo_values[5])
 
     def referesh(self):
         self.ui.RoverStatusBox.setPlainText(self.client.status)
@@ -690,10 +762,36 @@ class MainApp(QtWidgets.QMainWindow):
             if self.client!=None:
                 self.client.close()
 
+    def disconnect_warning(self):
+        self.disconnection_detected.emit()
+
+    def disconnect_message(self):
+        if self.connected==True:
+            self.connected=False
+            msg = QtWidgets.QMessageBox()
+            msg.setIcon(QtWidgets.QMessageBox.Critical)
+            msg.setText("Rover Has disconnected, please reconnect")
+            msg.setWindowTitle("Disconnect")
+            msg.exec_()
+            self.client.close()
+            
+            self.ui.ConnectionStatus.setText("Disconnected")
+            self.show_connect_dialog()
+
     def set_ip_and_port(self, ip_widget, port_widget):
         ip_widget.setText(DEFIP)
         port_widget.setText(DEFPORT) 
                  
+    def rover_initialization(self):
+        print("Managing rover initialization")
+        time.sleep(1)
+        self.client.send_message("arm 1500 1")
+        time.sleep(1)
+        self.client.send_message("arm 1500 2")
+        time.sleep(1)
+        self.client.send_message("arm 1500 3")
+        time.sleep(1)
+        self.client.send_message("arm 1500 4")
 
     def show_connect_dialog(self):
         if self.connected == False:
@@ -712,11 +810,20 @@ class MainApp(QtWidgets.QMainWindow):
                 port = port.text()
                 print("Connected to:")
                 print(ip, port)
-                self.client = Client(ip,port)
+                self.client = Client(ip,port, self.disconnect_warning)
 
                 if self.client.connect() == True:
                     self.connected = True
                     self.ui.ConnectionStatus.setText("Connected")
+                    msg = QtWidgets.QMessageBox()
+                    msg.setIcon(QtWidgets.QMessageBox.Information)
+                    msg.setText("Rover succesfully connected")
+                    msg.setWindowTitle("Connected")
+                    msg.addButton(QtWidgets.QMessageBox.Ok)
+                    init_thread = threading.Thread(target=self.rover_initialization)
+                    init_thread.start()
+
+                    msg.exec_()
                 else:
                     msg = QtWidgets.QMessageBox()
                     msg.setIcon(QtWidgets.QMessageBox.Critical)
