@@ -218,6 +218,16 @@
            </widget>
           </item>
           <item>
+           <widget class="QRadioButton" name="WheelJoystick2Check">
+            <property name="text">
+             <string>Joystick2</string>
+            </property>
+            <attribute name="buttonGroup">
+             <string notr="true">WheelControlSelect</string>
+            </attribute>
+           </widget>
+          </item>
+          <item>
            <widget class="QRadioButton" name="WheelButtonsCheck">
             <property name="text">
              <string>Buttons</string>
@@ -400,7 +410,7 @@
  <resources/>
  <connections/>
  <buttongroups>
-  <buttongroup name="WheelControlSelect"/>
   <buttongroup name="ArmControlSelect"/>
+  <buttongroup name="WheelControlSelect"/>
  </buttongroups>
 </ui>

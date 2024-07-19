@@ -28,7 +28,7 @@ import time
 
 from PyQt5.QtCore import QThread, pyqtSignal
 
-DEFIP = '192.168.10.1'
+DEFIP = '10.42.0.1'
 DEFPORT = '6969'
 VARMPORT = '/dev/ttyACM0'
 
@@ -257,7 +257,9 @@ class SerialReader:
         self.thread = threading.Thread(target=self.read_from_serial)
     
     def connect(self):
+        print('connecting')
         try:
+            print(self.baudrate)
             self.ser = serial.Serial(self.port, self.baudrate, timeout=self.timeout)
             return False
         except:
@@ -292,7 +294,8 @@ class MyController(Controller):
         self.motor_strength = 0
         self.dir = 'stop'
         self.coord = [0,0]
-        self.THRESHOLD = 30000
+#        self.THRESHOLD = 30000
+        self.THRESHOLD = 20000
 
     def checkSend(self,message):
         if True:
@@ -316,13 +319,13 @@ class MyController(Controller):
             self.dir = "forward"
         else:
             self.dir = "stop"
-            self.checkSend("move forward 0")
+            self.checkSend("stop")
             return
 
         print("Update Speed")
         print(self.dir)
         print(self.motor_strength)
-        self.checkSend("move "+self.dir +" "+str(self.motor_strength))
+        self.checkSend("mix"+" "+str(self.motor_strength)+" "+str(x)+" "+str(y))
 
     def on_R3_up(self,value):
         self.coord[0] = value
@@ -461,6 +464,12 @@ class MainApp(QtWidgets.QMainWindow):
 
         self.show_connect_dialog()
 
+        self.joySerial = SerialReader(port = '/dev/ttyUSB0', baudrate=115200, callback=self.joystickSerialCallback)
+        if self.joySerial.connect():
+            print('Other Joystick Not available')
+            self.ui.WheelJoystick2Check.setEnabled(False)
+
+
         self.armSerial = SerialReader(callback=self.virtualArm)
         while self.armSerial.connect():
             msg = QtWidgets.QMessageBox()
@@ -489,6 +498,8 @@ class MainApp(QtWidgets.QMainWindow):
         self.listen_thread = threading.Thread(target=lambda: self.controller.listen(on_connect=self.controller_connect, on_disconnect=self.controller_disconnect, timeout=5))
         # Start the thread
         self.listen_thread.start()
+
+        self.armcount = 0
 
         msg = QtWidgets.QMessageBox()
         msg.setIcon(QtWidgets.QMessageBox.Information)
@@ -544,6 +555,7 @@ class MainApp(QtWidgets.QMainWindow):
         self.ui.WheelAutomaticCheck.toggled.connect(self.enable_automatic)
 
         self.ui.ArmVArmCheck.toggled.connect(self.enable_varm)
+        self.ui.WheelJoystick2Check.toggled.connect(self.enable_JoySerial)
 
         self.ui.ReconnectControllerButton.clicked.connect(self.reconnect_controller)
 
@@ -572,6 +584,20 @@ class MainApp(QtWidgets.QMainWindow):
         self.camera.start()
 
         print("Done with setup")
+
+    def joystickSerialCallback(self,val):
+        print('Joystick')
+        print(val)
+
+    def enable_JoySerial(self):
+        if self.ui.WheelJoystick2Check.isChecked():
+            print("Enabling JoySerial")    
+            #self.armCalibrateWindow.reset_calibration()
+            self.joySerial.start()
+        else:
+            self.joySerial.stop()
+            self.joySerial = SerialReader(port = '/dev/ttyUSB0', baudrate=115200, callback=self.joystickSerialCallback)
+            self.joySerial.connect()
 
     def enable_varm(self):
         if self.ui.ArmVArmCheck.isChecked():
@@ -648,9 +674,9 @@ class MainApp(QtWidgets.QMainWindow):
         outData[3] = round(2500 - (int(inData[2]) / 1023) * 2000)
         outData[4] = round(2500 - (int(inData[4]) / 1023) * 2000)
 
-        outData[3] = round(self.map_range(outData[3], 1400, 2070, 1330, 2470))
-        outData[2] = round(self.map_range(outData[2], 970, 1510, 680, 1610))
-        outData[4] = round(self.map_range(outData[4], 1340, 2900, 1390, 2370))
+        # outData[3] = round(self.map_range(outData[3], 1400, 2070, 1330, 2470))
+        # outData[2] = round(self.map_range(outData[2], 970, 1510, 680, 1610))
+        outData[4] = round(self.map_range(outData[4], 1600, 2230, 1800, 900))
         return outData
 
     def virtualArm(self,data):
@@ -675,11 +701,13 @@ class MainApp(QtWidgets.QMainWindow):
 
             self.servo_values = self.map_vArm_servo(self.averagedData)
 
+            if self.armcount %2 ==0 :
             #Send the servo values
-            self.client.send_message("arm "+str(self.servo_values[1])+" 1")
-            self.client.send_message("arm "+str(self.servo_values[2])+" 2")
-            self.client.send_message("arm "+str(self.servo_values[3])+" 3")
-            self.client.send_message("arm "+str(self.servo_values[4])+" 4")
+                self.client.send_message("arm "+str(self.servo_values[1])+" 1")
+                self.client.send_message("arm "+str(self.servo_values[2])+" 2")
+                self.client.send_message("arm "+str(self.servo_values[3])+" 3")
+                self.client.send_message("arm "+str(self.servo_values[4])+" 4")
+            self.armcount+=1
 
             print("Arm Sending Values")
             print("BaseServo")
